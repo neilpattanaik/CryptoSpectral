@@ -55,10 +55,10 @@ class CryptoDataset:
 
         cursor, db = CryptoDataset.get_sql()
         seconds_per_interval = 3600 if table_name == "hour" else 86400 if table_name == "day" else 604800
-        coin_api_data = requests.get("https://min-api.cryptocompare.com/data/v2/histo"+self._api_endpoint, params={'limit':min((self._start_time-timestamp)/seconds_per_interval, 2000), 'tsym':'USD', 'api_key':self._api_key, 'fsym':coin[0], 'aggregate':self._aggregate, 'aggregatePredictableTimePeriods':'false'}).json()['Data']
+        coin_api_data = requests.get("https://min-api.cryptocompare.com/data/v2/histo"+self._api_endpoint, params={'limit':min(max((self._start_time-timestamp)/seconds_per_interval, 1), 2000), 'tsym':'USD', 'api_key':self._api_key, 'fsym':coin[0], 'aggregate':self._aggregate, 'aggregatePredictableTimePeriods':'false'}).json()['Data']
         last_received_timestamp =  coin_api_data['TimeFrom']
         while last_received_timestamp > timestamp:
-            new_coin_api_data = requests.get("https://min-api.cryptocompare.com/data/v2/histo"+self._api_endpoint, params={'toTs':last_received_timestamp,'limit':min((last_received_timestamp-timestamp)/seconds_per_interval, 2000), 'tsym':'USD', 'api_key':self._api_key, 'fsym':coin[0], 'aggregate':self._aggregate, 'aggregatePredictableTimePeriods':'false'}).json()['Data']
+            new_coin_api_data = requests.get("https://min-api.cryptocompare.com/data/v2/histo"+self._api_endpoint, params={'toTs':last_received_timestamp,'limit':min(max((1, last_received_timestamp-timestamp)/seconds_per_interval), 2000), 'tsym':'USD', 'api_key':self._api_key, 'fsym':coin[0], 'aggregate':self._aggregate, 'aggregatePredictableTimePeriods':'false'}).json()['Data']
             coin_api_data['Data'].append(new_coin_api_data['Data'])
             last_received_timestamp = new_coin_api_data['TimeFrom']
         for datapoint in coin_api_data['Data']:
