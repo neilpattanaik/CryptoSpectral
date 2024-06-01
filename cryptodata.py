@@ -13,7 +13,9 @@ class CryptoDataset:
     - timeframe (integer between 1 and 720 for hourly interval, or any integer greater than 1 for daily/weekly)
     - interval (string, must be "hour", "day", or "week") 
 
-    Has two attributes that should be accessed by other classes:
+    Has three attributes that should be accessed by other classes:
+    - .data_matrix is the nxp matrix (n coins, p timestamps) of the stacked normalized return series
+    - .coins is the list of coin names ordered as in the data matrix
     - .creation_date is the date (UTC) that the CryptoDataset was created
     - .historical_coin_data is a dictionary with string keys and chronological (ascending) list of prices value pairs. i.e, {'BTC':[69432.53, 72532.45,...]}
     """
@@ -128,7 +130,7 @@ class CryptoDataset:
         if interval not in ["hour", "day", "week"]:
             raise Exception("Interval is not valid. Must be hour, day, or week.")
         elif not type(number_of_coins is int) or 0 >= number_of_coins or 100 < number_of_coins:
-            raise Exception("Invalid number_of_coins")
+            raise Exception("Invalid coin number")
         elif not type(timeframe) is int:
             raise Exception("Non-integer timeframe")
 
@@ -140,3 +142,81 @@ class CryptoDataset:
         self.get_coin_list()
         # Gets historical data for coinlist and timeframe
         self.get_historical_data()
+        # Build Data Matrix (nxp, where n is number of coins and p is number of timestamps)
+        returns_matrix_object =DataSetMatrix(self, True)
+        self.data_matrix = returns_matrix_object.data_matrix
+        # Set .coins attr
+        self.coins = returns_matrix_object.order_list
+        
+        price_matrix_object = DataSetMatrix(self, False)
+        self.price_matrix = price_matrix_object.data_matrix
+        
+        
+
+class NormalizedReturnSeries:
+    """Instantiated with an list of prices in chronoligical ascending order, creates a normalized return series (list) accessible
+    by .series attribute"""
+    def build_return_series(self):
+        # Constructs the UnNormalized Return Series
+        i = 0
+        while i < len(self.series)-1:
+            price_at_t, price_at_t_minus_1 = self.series[i+1], self.series.pop(i) or 1
+            self.series.insert(i, (price_at_t-price_at_t_minus_1)/price_at_t_minus_1)
+            i += 1
+        self.series.pop()
+
+    def get_mean(self):
+        self.mean = sum(self.series)/len(self.series)
+    
+    def get_standard_deviation(self):
+        self.standard_deviation = sqrt(sum([pow(R - self.mean, 2) for R in self.series])/(len(self.series)-1))
+
+    def normalize(self):
+        for i in range(len(self.series)):
+            self.series[i] = (self.series[i] - self.mean)/self.standard_deviation
+
+    def __init__(self, input_list):
+        # Creates UnNormalized Return Series
+        self.series = input_list[:]
+        self.build_return_series()
+
+        # Normalize the Return Series
+        self.get_mean()
+        self.get_standard_deviation()
+        self.normalize()
+
+class DataSetMatrix:
+    """A DataSetMatrices object is instantiated a CryptoDataset object. It has the standardized Covariance matrix
+    generated from the return series for each coin in the dataset. This class has three public attributes:
+    - .correlation_matrix is an np array representing a symmetric correlation matrix w/ <number_of_coins> rows and columns. To access this attr, 
+    MUST call .build_correlation_matrix() method first.
+    - .data_matrix is the matrix (np array) of the stacked normalized return series
+    - .order_list is the list of string coin names ordered as in the rows of the data matrix"""
+
+    def build_data_matrix(self, returns):
+        """From a CryptoDataset, builds a data matrix of the stacked normalized return series. .order_list is a tuple showing the order (top to bottom)
+        of the coins stacked in the data matrix"""
+        arr_list =  []
+        if returns:
+            self.order_list = list(self.dataset.historical_coin_data.keys())
+            last_index, del_list = self.dataset.number_of_coins-1, []
+            for i in range(len(self.order_list)):
+                if self.dataset.historical_coin_data[self.order_list[i]][0] and self.dataset.historical_coin_data[self.order_list[i]][last_index]:
+                    arr_list.append(NormalizedReturnSeries(self.dataset.historical_coin_data[self.order_list[i]]).series)
+                else:
+                    del_list.append(i)
+            for index in sorted(del_list, reverse=True):
+                self.order_list.pop(index)
+        else:
+            self.order_list = list(self.dataset.coins)
+            for i in range(len(self.order_list)):
+                arr_list.append(self.dataset.historical_coin_data[self.order_list[i]])
+        self.data_matrix = np.array(arr_list)
+
+
+        
+
+    def __init__(self, dataset, returns):
+        self.dataset = dataset
+        self.build_data_matrix(returns)
+
